@@ -1,0 +1,49 @@
+name: Build LiroycEffects
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Unzip source
+        shell: bash
+        run: |
+          unzip -q source.zip
+          ls effectcraft-main | head
+      - name: Fonts (Rubik, Heebo, Assistant)
+        shell: bash
+        run: |
+          pip install fonttools brotli
+          mkdir -p dl out/fonts
+          base=https://raw.githubusercontent.com/google/fonts/main/ofl
+          curl -fsSL "$base/rubik/Rubik%5Bwght%5D.ttf" -o "dl/Rubik.ttf" || true
+          curl -fsSL "$base/heebo/Heebo%5Bwght%5D.ttf" -o "dl/Heebo.ttf" || true
+          curl -fsSL "$base/assistant/Assistant%5Bwght%5D.ttf" -o "dl/Assistant.ttf" || true
+          for fam in Rubik Heebo Assistant; do
+            [ -s "dl/$fam.ttf" ] || continue
+            for pair in Regular:400 Medium:500 SemiBold:600; do
+              name=${pair%%:*}; w=${pair##*:}
+              fonttools varLib.instancer "dl/$fam.ttf" wght=$w -o "out/fonts/$fam-$name.ttf" || continue
+              pyftsubset "out/fonts/$fam-$name.ttf" --unicodes="U+0020-007E,U+00A0-00FF,U+2010-2027,U+2030-205E,U+20AC,U+2190-21FF,U+25A0-25FF" --layout-features='*' --output-file="out/fonts/${fam}Latin-$name.ttf" || true
+            done
+          done
+          ls -la out/fonts
+      - name: Build
+        working-directory: effectcraft-main
+        run: cargo build --release -p effectcraft
+      - name: Package
+        shell: bash
+        run: |
+          cp effectcraft-main/target/release/effectcraft.exe out/LiroycEffects.exe
+          mv out LiroycEffects
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LiroycEffects-windows
+          path: LiroycEffects
